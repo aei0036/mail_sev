@@ -18,18 +18,21 @@ from email.mime.image import MIMEImage
 
 import pandas as pd
 import webbrowser
-
+import traceback
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
+from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 
 #====================================================================================================
 # e-mail info.
 #====================================================================================================
 smtp_info = dict({"smtp_server" : "smtp.worksmobile.com", # SMTP 서버 주소
-                  "smtp_user_id" : "sjkim@dodamip.com", 
-                  "smtp_user_pw" : "jqllL04Tr8Sd", #eodhkd13494!" ,
+                  "smtp_user_id" : "ip-radar@dodamip.com", 
+                  "smtp_user_pw" : "YUOEIpA5aGRZ",
                   "smtp_port" : 587}) # SMTP 서버 포트
 
 #====================================================================================================
@@ -61,38 +64,83 @@ def search_main(search_date):
     search_list = []
     print("검색 기준일 :", search_date)
 
-    if 0:#SCRAPING_FLAG: #kista(한국특허전략개발원):
+    if SCRAPING_FLAG: #kista(한국특허전략개발원):
         try:
-            driver.get("https://www.kista.re.kr/usr/com/prm/BBSList.do?bbsId=BBSMSTR_000000000411&menuNo=10009&upperMenuId=10")
+            #사업정보 페이지
+            driver.get("https://www.kista.re.kr/user/board.do?bbsId=BBSMSTR_000000000382")
             driver.implicitly_wait(1)
-            print("kista(한국특허전략개발원) scraping")
 
-            table = driver.find_element_by_class_name('dtl')
+            #팝업차단함수
+            popup_handler = driver.window_handles
+            for popup_i in popup_handler:
+                if popup_i != popup_handler[0]:
+                    driver.switch_to.window(popup_i)
+                    driver.close()
+            driver.switch_to.window(popup_handler[0])
+
+
+            table = driver.find_element_by_class_name('table_wrap')
             tbody = table.find_element_by_tag_name("tbody")
             rows = tbody.find_elements_by_tag_name("tr")
-            href_pre = "http://www.kista.re.kr/usr/com/prm/BBSDetail.do?&menuNo=10009&upperMenuId=10&bbsId=BBSMSTR_000000000411&nttId="
-            href_post = "&pageIndex=1"
+            href_pre = "https://www.kista.re.kr/user/board.do?bbsId=BBSMSTR_000000000382"
             for index, value in enumerate(rows):
 
-                announce_date = value.find_elements_by_tag_name("td")[3]
+                announce_data = value.find_elements_by_tag_name("td")[3].text.replace('-','.')
                 body=value.find_elements_by_tag_name("td")[1]
                 
-                #print(href)
-                if datetime.strptime(announce_date.text,"%Y.%m.%d")>=datetime.strptime(search_date,"%Y.%m.%d"):
+                if datetime.strptime(announce_data,"%Y.%m.%d")>=datetime.strptime(search_date,"%Y.%m.%d"):
                     
-                    href = href_pre+body.find_element_by_name('subForm').find_elements_by_tag_name("input")[4].get_attribute("value")+href_post
-                    temp_str = "[전략원] " + announce_date.text + "  "+ body.text.replace(' ','_') + "  " + href + "\n"
+                    href=href_pre
+                    temp_str = "[전략원] " + announce_data + "  "+ body.text.replace(' ','_') + "  " + href + "\n"
+                    search_list.append(temp_str)
+
+            #입찰공고 페이지
+            driver.get("https://www.kista.re.kr/user/board.do?bbsId=BBSMSTR_000000000442")
+            driver.implicitly_wait(1)
+
+            #팝업차단함수
+            popup_handler = driver.window_handles
+            
+            for popup_i in popup_handler:
+                if popup_i != popup_handler[0]:
+                    driver.switch_to.window(popup_i)
+                    driver.close()
+            driver.switch_to.window(popup_handler[0])
+
+            table = driver.find_element_by_class_name('table_wrap')
+            tbody = table.find_element_by_tag_name("tbody")
+            rows = tbody.find_elements_by_tag_name("tr")
+            href_pre = "https://www.kista.re.kr/user/board.do?bbsId=BBSMSTR_000000000442"
+            for index, value in enumerate(rows):
+
+                announce_state = value.find_elements_by_tag_name("td")[2].text
+
+                body=value.find_elements_by_tag_name("td")[1]
+                
+                if announce_state == "진행중":
+                    href=href_pre
+                    temp_str = "[전략원] " + announce_state + "  "+ body.text.replace(' ','_') + "  " + href + "\n"
                     search_list.append(temp_str)
 
         except Exception as e:
            print("kista(한국특허전략개발원) scraping exception!!") 
            print("exception message : ",e)
 
-    if 0:#SCRAPING_FLAG: #koipa(한국지식재산보호원):
+    if SCRAPING_FLAG: #koipa(한국지식재산보호원):
         try:
             driver.get("https://www.koipa.re.kr/home/board/brdList.do?menu_cd=000041")
             driver.implicitly_wait(1)
             print("koipa(한국지식재산보호원) scraping")
+
+
+            #팝업차단함수
+            popup_handler = driver.window_handles
+        
+            for popup_i in popup_handler:
+                if popup_i != popup_handler[0]:
+                    driver.switch_to.window(popup_i)
+                    driver.close()
+            driver.switch_to.window(popup_handler[0])
 
             table = driver.find_element_by_class_name("tbl-group-inr")
             tbody = table.find_element_by_tag_name("tbody")
@@ -111,11 +159,20 @@ def search_main(search_date):
            print("koipa(한국지식재산보호원) scraping exception!!") 
            print("exception message : ",e)
 
-    if 0:#SCRAPING_FLAG: #Kautm(한국대학기술이전협회):
+    if SCRAPING_FLAG: #Kautm(한국대학기술이전협회):
         try:
             driver.get("http://www.kautm.net/bbs/?so_table=tlo_news&category=business")
             driver.implicitly_wait(1)
             print("kautm(한국대학기술이전협회) scraping")
+
+            #팝업차단함수
+            popup_handler = driver.window_handles
+            
+            for popup_i in popup_handler:
+                if popup_i != popup_handler[0]:
+                    driver.switch_to.window(popup_i)
+                    driver.close()
+            driver.switch_to.window(popup_handler[0])
 
             table = driver.find_element_by_class_name("listTable")
             tbody = table.find_element_by_tag_name("tbody")
@@ -140,6 +197,15 @@ def search_main(search_date):
             driver.get("https://www.innopolis.or.kr/newBusiness?menuId=MENU01028")
             driver.implicitly_wait(1)
             print("innopolis(연구개발특구진흥재단) scraping")
+
+            #팝업차단함수
+            popup_handler = driver.window_handles
+            
+            for popup_i in popup_handler:
+                if popup_i != popup_handler[0]:
+                    driver.switch_to.window(popup_i)
+                    driver.close()
+            driver.switch_to.window(popup_handler[0])
 
             #table = driver.find_element_by_css_selector("#detail-contents > div.business-slider-area > div > div.bx-viewport")
             tbody = driver.find_element_by_css_selector("#business-city1-1")
@@ -168,6 +234,15 @@ def search_main(search_date):
             driver.get("https://www.compa.re.kr/cop/bbs/selectBoardList.do;jsessionid=0E67D131CE4444EE0EB1266CF5721EDA?bbsId=BBSMSTR_DDDDDDDDDDDD")
             driver.implicitly_wait(10)
             print("compa(과학기술일자리진흥원) scraping")
+
+            #팝업차단함수
+            popup_handler = driver.window_handles
+            
+            for popup_i in popup_handler:
+                if popup_i != popup_handler[0]:
+                    driver.switch_to.window(popup_i)
+                    driver.close()
+            driver.switch_to.window(popup_handler[0])
             
             table = driver.find_element_by_class_name("CommonArea")
             tbody = table.find_element_by_tag_name("tbody")
@@ -197,6 +272,15 @@ def search_main(search_date):
             driver.get("http://www.technopark.kr/businessboard")
             driver.implicitly_wait(1)
             print("technopart scraping")
+
+            #팝업차단함수
+            popup_handler = driver.window_handles
+            
+            for popup_i in popup_handler:
+                if popup_i != popup_handler[0]:
+                    driver.switch_to.window(popup_i)
+                    driver.close()
+            driver.switch_to.window(popup_handler[0])
 
             Location_list = driver.find_element_by_class_name("list").find_elements_by_tag_name('a')
             
@@ -230,20 +314,27 @@ def search_main(search_date):
                 
     if SCRAPING_FLAG: #kaips(한국지식재산서비스협회):
         try:
-            driver.get("http://www.kaips.or.kr/com.do?method=c04")
-            driver.implicitly_wait(1)
             print("kaips(한국지식재산서비스협회) scraping")
+            for i in range(1,3):
+                driver.get("http://www.kaips.or.kr/bbs_shop/list.htm?page="+str(i)+"&board_code=kaips_4")
+                driver.implicitly_wait(1)
+                
 
-            table = driver.find_element_by_id('table_wrap')
-            tbody = table.find_element_by_tag_name("tbody")
-            rows = tbody.find_elements_by_tag_name("tr")
+                #팝업차단함수
+                popup_handler = driver.window_handles
+                
+                for popup_i in popup_handler:
+                    if popup_i != popup_handler[0]:
+                        driver.switch_to.window(popup_i)
+                        driver.close()
+                driver.switch_to.window(popup_handler[0])
+                
+                tbody = driver.find_element_by_xpath('//*[@id="list_board"]/ul[3]')
+                rows = tbody.find_elements_by_tag_name('li')
+                for index, value in enumerate(rows):
+                    announce_date = value.find_elements_by_tag_name("div")[3].text.replace('-','.')
+                    body=value.find_elements_by_tag_name("div")[1]
 
-            for index, value in enumerate(rows):
-                if index != 0: 
-                    announce_date = value.find_elements_by_tag_name("td")[3].text.replace('-','.')
-                    body=value.find_elements_by_tag_name("td")[1]
-                    
-                    #print(href)
                     if datetime.strptime(announce_date,"%Y.%m.%d")>=datetime.strptime(search_date,"%Y.%m.%d"):                  
                         href = body.find_element_by_tag_name("a").get_attribute('href')
                         temp_str = "[지식재산서비스협회] " + announce_date + "  "+ body.text.replace(' ','_') + "  " + href + "\n"
@@ -257,6 +348,15 @@ def search_main(search_date):
             driver.get("https://pms.ripc.org/pms/biz/applicant/notice/list.do")
             driver.implicitly_wait(1)
             print("RIPC(지역지식재산센터) scraping")
+
+            #팝업차단함수
+            popup_handler = driver.window_handles
+            
+            for popup_i in popup_handler:
+                if popup_i != popup_handler[0]:
+                    driver.switch_to.window(popup_i)
+                    driver.close()
+            driver.switch_to.window(popup_handler[0])
 
             Location_list = driver.find_element_by_class_name("checkbox_grp")
             search_button = driver.find_element_by_class_name("srch-group-text")
@@ -293,7 +393,8 @@ def search_main(search_date):
             print("RIPC(지역지식재산센터) scraping exception!!")
             print("exception message : ",e)
 
-    if SCRAPING_FLAG: #RIPC(서울센터):
+
+    """if 0:#SCRAPING_FLAG: #RIPC(서울센터) / ripc통합 사이트에서 조회 가능하기에 동작x
         try:
             driver.get("https://www.ipseoul.kr/board/listView.do?boardCode=B00001")
             driver.implicitly_wait(1)
@@ -314,7 +415,7 @@ def search_main(search_date):
                         search_list.append(temp_str)
         except Exception as e:
             print("RIPC(서울센터) scraping exception!!")
-            print("exception message : ",e)
+            print("exception message : ",e)"""
 
     if SCRAPING_FLAG: #kipa(발명진흥회):
         try: 
@@ -339,7 +440,7 @@ def search_main(search_date):
 
     if SCRAPING_FLAG: #JCIA(전남정보문화산업진흥원):
         try: 
-            driver.get("http://www.jcia.or.kr/cf/information/business.do")
+            driver.get("https://jcia.or.kr/cf/information/notice/business.do")
             driver.implicitly_wait(1)
             print("JCIA(전남정보문화산업진흥원) scraping")
 
@@ -351,7 +452,7 @@ def search_main(search_date):
                 announce_date = value.find_elements_by_tag_name("td")[5].text.replace('-','.')
                 body=value.find_elements_by_tag_name("td")[2]
                 if datetime.strptime(announce_date,"%Y.%m.%d")>=datetime.strptime(search_date,"%Y.%m.%d"):    
-                    href = "http://www.jcia.or.kr/cf/Board/" + body.find_element_by_tag_name("a").get_attribute('OnClick').split("'")[1] + "/detailView.do"
+                    href = "https://jcia.or.kr/cf/Board/" + body.find_element_by_tag_name("a").get_attribute('OnClick').split("'")[1] + "/detailView.do"
                     temp_str = "[전남정보문화산업진흥원][전남] " + announce_date + "  "+ body.text.replace(' ','_') + "  " + href + "\n"
                     search_list.append(temp_str)
         except Exception as e:
@@ -382,21 +483,22 @@ def search_main(search_date):
 
     if SCRAPING_FLAG: #대구디지털산업진흥원:
         try: 
-            driver.get("https://dip.or.kr/home/notice/boardList.ubs?fboardcd=notice&sfclassification=")
+            driver.get("https://dip.or.kr/home/notice/businessbbs/boardList.ubs?fboardcd=business")
             driver.implicitly_wait(1)
             print("대구디지털산업진흥원 scraping")
 
-            table = driver.find_element_by_class_name('contents')
-            tbody = table.find_element_by_tag_name("tbody")
-            rows = tbody.find_elements_by_tag_name("tr")
+            table = driver.find_element_by_class_name('board__list')
+            #tbody = table.find_element_by_tag_name("tbody")
+            rows = table.find_elements_by_tag_name("tr")
 
             for index, value in enumerate(rows):
-                announce_date = value.find_elements_by_tag_name("td")[6].text
-                body=value.find_elements_by_tag_name("td")[3]
-                href_pre = "https://dip.or.kr/home/notice/boardRead.ubs?sfpsize=20&sfcategory=&fboardcd=notice&sfclassification=&sfkind=&sfsearch=ftitle&sfkeyword=&fboardnum="
+                announce_date = value.find_element_by_class_name('date').text.replace('-','.')
+                body=value.find_element_by_class_name('title')
+                
+                href_pre = "https://dip.or.kr/home/notice/businessbbs/boardRead.ubs?sfpsize=10&fboardcd=business&fboardnum="
                 if datetime.strptime(announce_date,"%Y.%m.%d")>=datetime.strptime(search_date,"%Y.%m.%d"):                  
                     href = href_pre + body.find_element_by_tag_name("a").get_attribute('href').split("'")[3]
-                    temp_str = "[대구디지털산업진흥원][대구] " + announce_date + "  "+ body.text.replace(' ','_') + "  " + href + "\n"
+                    temp_str = "[대구디지털산업진흥원][대구] " + announce_date + "  "+ body.text.split('\n')[0].replace(' ','_') + "  " + href + "\n"
                     search_list.append(temp_str)
 
         except Exception as e:
@@ -467,14 +569,15 @@ def search_main(search_date):
                 for page_index in range(1,10):
                     if index != 0:  #0 인 경우(전체 공고) 패스
                         sub_driver.get("https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/list.do?hashCode="+content_but.find_element_by_tag_name('a').get_attribute('id') + "&cpage=" + str(page_index))
-                        sub_driver.implicitly_wait(1)
+                        WebDriverWait(driver,60).until(EC.presence_of_element_located((By.XPATH,'//*[@id="articleSearchForm"]/div[2]/div[4]/table/tbody/tr[1]/td[1]')))
+                        #sub_driver.implicitly_wait(1)
                         
                         table = sub_driver.find_element_by_class_name("table_Type_1")
                         tbody = table.find_element_by_tag_name("tbody")
                         rows = tbody.find_elements_by_tag_name("tr")
 
                         for j_index, value in enumerate(rows):
-                            announce_date = value.find_elements_by_tag_name("td")[5].text.replace('-','.')
+                            announce_date = value.find_elements_by_tag_name("td")[6].text.replace('-','.')
                             body=value.find_elements_by_tag_name("td")[2]
                             if body.text[0] == '[':
                                 announce_location = body.text.split(']')[0].split('[')[1]
@@ -496,7 +599,7 @@ def search_main(search_date):
             
         except Exception as e:
             print("BIZ INFO(기업마당) scraping exception!!")
-            print("exception message : ",e)
+            print("exception message : ",traceback.format_exc())
 
     if FALSE: #중소벤처기업진흥공단:
         try: 
@@ -520,7 +623,7 @@ def search_main(search_date):
             print("중소벤처기업진흥공단 scraping exception!!")
             print("exception message : ",e)
 
-    if SCRAPING_FLAG: #성남산업단지관리공단:
+    """if 0: #SCRAPING_FLAG: #성남산업단지관리공단:  / 유효한 공고가 많지 않아 보이므로 일단 0으로 설정
         try: 
             driver.get("https://snic.or.kr/Info/notice")
             driver.implicitly_wait(1)
@@ -550,7 +653,7 @@ def search_main(search_date):
 
         except Exception as e:
             print("성남산업단지관리공단 scraping exception!!")
-            print("exception message : ",e)
+            print("exception message : ",e)"""
 
     if SCRAPING_FLAG: #부산정보산업진흥원:
         try: 
@@ -585,7 +688,7 @@ def search_main(search_date):
             print("부산정보산업진흥원 scraping exception!!")
             print("exception message : ",e)
 
-    if SCRAPING_FLAG: #메타버스진흥원:
+    """if 0: #SCRAPING_FLAG: #메타버스진흥원:  / 사이트폐쇄
         try: 
             driver.get("http://www.metaversehub.kr/bbs/board.php?tbl=bbs51")
             driver.implicitly_wait(1)
@@ -605,7 +708,7 @@ def search_main(search_date):
 
         except Exception as e:
             print("메타버스진흥원 scraping exception!!")
-            print("exception message : ",e)
+            print("exception message : ",e)"""
 
     if SCRAPING_FLAG: #충북글로벌마케팅시스템 - 시책사업:
         try: 
@@ -737,17 +840,17 @@ def search_main(search_date):
 
     if SCRAPING_FLAG: #KEA(한국전자정보통신산업진흥원):
         try: 
-            driver.get("http://www.gokea.org/bbs/list.php?board_id=kor_notice")
+            driver.get("https://www.gokea.org/core/?cid=47")
             driver.implicitly_wait(1)
             print("KEA(한국전자정보통신산업진흥원) scraping")
 
-            table = driver.find_element_by_class_name('content_box')
+            table = driver.find_element_by_class_name('tbl_list')
             tbody = table.find_element_by_tag_name('tbody')
             rows = tbody.find_elements_by_tag_name("tr")
 
             for index, value in enumerate(rows):
-                announce_date = value.find_elements_by_tag_name("td")[3].text
-                body=value.find_elements_by_tag_name("td")[2]
+                announce_date = value.find_element_by_class_name('col_date').text
+                body=value.find_element_by_class_name('col_tit')
                 if datetime.strptime(announce_date,"%Y.%m.%d")>=datetime.strptime(search_date,"%Y.%m.%d"): 
                     href = body.find_element_by_tag_name("a").get_attribute('href')
                     temp_str = "[한국전자정보통신산업진흥원] " + announce_date + "  "+ body.text.replace(' ','_') + "  " + href + "\n"
@@ -922,14 +1025,12 @@ def search_main(search_date):
             driver.implicitly_wait(1)
             print("충남경제진흥원 scraping")
 
-            #table = driver.find_element_by_class_name('mCon')
-            #tbody = table.find_element_by_tag_name('ul')
-            #rows = tbody.find_elements_by_tag_name('li')
 
             for index in range(1,10):
-                top_temp = driver.find_element_by_xpath('//*[@id="content"]/div/div[2]/ul/li[' + str(index) + ']/div/div[1]')
-                announce_date = top_temp.find_elements_by_tag_name('div')[1].find_elements_by_tag_name('li')[1].text.split(' ')[2].replace('-','.')
-                body=top_temp.find_element_by_class_name('title')
+                value = driver.find_element_by_xpath('//*[@id="content"]/div[2]/div[3]/div[2]/table/tbody/tr[' + str(index) + ']/td[2]/div')
+                announce_date = driver.find_element_by_xpath('//*[@id="content"]/div[2]/div[3]/div[2]/table/tbody/tr[' + str(index) + ']/td[4]').text.split(' ')[0].replace('-','.')
+                
+                body=value.find_element_by_tag_name('a')
 
                 if datetime.strptime(announce_date,"%Y.%m.%d")>=datetime.strptime(search_date,"%Y.%m.%d"): 
                     href = body.get_attribute('href')
@@ -938,7 +1039,7 @@ def search_main(search_date):
                     
         except Exception as e:
             print("충남경제진흥원 scraping exception!!")
-            print("exception message : ",e)
+            print("exception message : ",traceback.format_exc())
 
     if SCRAPING_FLAG: #성남산업진흥원:
         try: 
@@ -961,7 +1062,7 @@ def search_main(search_date):
                     
         except Exception as e:
             print("성남산업진흥원 scraping exception!!")
-            print("exception message : ",e)
+            print("exception message : ",traceback.format_exc())
 
     if SCRAPING_FLAG: #서울산업진흥원:
         try: 
@@ -1792,12 +1893,14 @@ def scraping_input():
 
         try:
             search_list_fi = search_main(search_date)
+            gb_search_list_fi = search_list_fi
         except Exception as e:
             messagebox.showinfo("[오류]", "검색 동작 비정상 종료")    
+            search_list_fi = 0
         
-        gb_search_list_fi = search_list_fi
+        
 
-        if len(search_list_fi)==0:
+        if search_list_fi==0:
             messagebox.showinfo("[알림]", "검색 결과 없음")
 
         #tree에 값 작성
